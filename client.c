@@ -6,11 +6,13 @@
 
 // run python3 -m http.server 8080 in the terminal  
 
+int createTCPIp4Socket();
+
 int main() {
     int socketFD;
     struct sockaddr_in address;
 
-    socketFD = socket(AF_INET, SOCK_STREAM, 0);
+    socketFD = createTCPIp4Socket();
     if (socketFD < 0) {
         perror("Socket creation failed");
         return 1;
@@ -38,4 +40,8 @@ int main() {
     printf("Respond was %s\n", buffer);
     
     return 0;
+}
+
+int createTCPIp4Scoket(){
+    return socket(AF_INET, SOCK_STREAM, 0);
 }
