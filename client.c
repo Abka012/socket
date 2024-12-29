@@ -1,47 +1,48 @@
+#include <arpa/inet.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <unistd.h>
+#define PORT 8080
 
-// run python3 -m http.server 8080 in the terminal  
-
-int createTCPIp4Socket();
-
-int main() {
-    int socketFD;
-    struct sockaddr_in address;
-
-    socketFD = createTCPIp4Socket();
-    if (socketFD < 0) {
-        perror("Socket creation failed");
-        return 1;
+int main(int argc, char const* argv[])
+{
+    int status, valread, client_fd;
+    struct sockaddr_in serv_addr;
+    char* hello = "Hello from client";
+    char buffer[1024] = { 0 };
+    if ((client_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return -1;
     }
 
-    address.sin_family = AF_INET;
-    address.sin_port = htons(8080); 
-    address.sin_addr.s_addr = inet_addr( "127.0.0.1");         
-    
-    int result = connect(socketFD, (const struct sockaddr *)&address, sizeof(address));
-    if (result < 0) {
-        perror("Connection failed");
-        return 1;
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    // Convert IPv4 and IPv6 addresses from text to binary
+    // form
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)
+        <= 0) {
+        printf(
+            "\nInvalid address/ Address not supported \n");
+        return -1;
     }
 
-    printf("Connected successfully!\n");
+    if ((status
+         = connect(client_fd, (struct sockaddr*)&serv_addr,
+                   sizeof(serv_addr)))
+        < 0) {
+        printf("\nConnection Failed \n");
+        return -1;
+    }
+    send(client_fd, hello, strlen(hello), 0);
+    printf("Hello message sent\n");
+    valread = read(client_fd, buffer,
+                   1024 - 1); // subtract 1 for the null
+                              // terminator at the end
+    printf("%s\n", buffer);
 
-    char* msg;
-    msg = "GET \\ HTTP/1.1\r\nHost:google.com\r\n\r\n";
-    send(socketFD, msg, strlen(msg), 0);
-
-    char buffer[1024];
-    recv(socketFD, buffer, 1024, 0);
-
-    printf("Respond was %s\n", buffer);
-    
+    // closing the connected socket
+    close(client_fd);
     return 0;
-}
-
-int createTCPIp4Scoket(){
-    return socket(AF_INET, SOCK_STREAM, 0);
 }
