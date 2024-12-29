@@ -1,31 +1,76 @@
 #include "client.h"
+#include "helper.h"
 
-int main() {
-    int client_fd;
-    struct sockaddr_in serv_addr;
-    char buffer[1024] = {0};
-    char *hello = "Hello from client";
+int main(int argc, char** argv) {
+    char* address = NULL;
+    char* port = NULL;
+    char* username = NULL;
+    char cmd[MAXLINE];
+    char c;
+    pthread_t tid;
 
-    // Create socket
-    client_fd = create_socket();
-
-    // Configure server address
-    configure_server_address(&serv_addr);
-
-    // Connect to the server
-    if (connect_to_server(client_fd, &serv_addr) < 0) {
-        return -1;
+    // Parse command-line arguments
+    while ((c = getopt(argc, argv, "hu:a:p:u:")) != EOF) {
+        switch (c) {
+            case 'h':
+                usage();
+                exit(1);
+                break;
+            case 'a':
+                address = optarg;
+                break;
+            case 'p':
+                port = optarg;
+                break;
+            case 'u':
+                username = optarg;
+                break;
+            default:
+                usage();
+                exit(1);
+        }
     }
 
-    // Send message to server
-    send_message(client_fd, hello);
+    if (optind == 1 || port == NULL || address == NULL || username == NULL) {
+        printf("Invalid usage\n");
+        usage();
+        exit(1);
+    }
 
-    // Read response from server
-    read_response(client_fd, buffer, sizeof(buffer));
-    printf("%s\n", buffer);
+    // Establish connection to the server
+    int connID = connection(address, port);
+    if (connID == -1) {
+        printf("Couldn't connect to the server\n");
+        exit(1);
+    }
 
-    // Close the socket
-    close(client_fd);
+    // Add a newline to the username and send it to the server
+    char usernameWithNewline[MAXLINE];
+    snprintf(usernameWithNewline, sizeof(usernameWithNewline), "%s\n", username);
+    if (io_writen(connID, usernameWithNewline, strlen(usernameWithNewline)) == -1) {
+        perror("Not able to send the data");
+        close(connID);
+        exit(1);
+    }
 
-    return 0;
+    // Create a thread for reading server responses
+    pthread_create(&tid, NULL, (void* (*)(void*))reader, (void*)(intptr_t)connID);
+
+    // Print the Chatroom prompt
+    printf("%s", prompt);
+
+    // Main loop for sending user input to the server
+    while (1) {
+        if ((fgets(cmd, MAXLINE, stdin) == NULL) && ferror(stdin)) {
+            perror("fgets error");
+            close(connID);
+            exit(1);
+        }
+
+        if (io_writen(connID, cmd, strlen(cmd)) == -1) {
+            perror("Not able to send the data");
+            close(connID);
+            exit(1);
+        }
+    }
 }

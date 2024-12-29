@@ -3,21 +3,33 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#include <netinet/in.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <pthread.h>
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <netdb.h>
+#include <string.h>
+#include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 
-#define PORT 8080
+#define BUFSIZE 1000
 
-// Function prototypes
-int create_server_socket();
-void configure_server_address(struct sockaddr_in *address);
-void bind_socket(int server_fd, struct sockaddr_in *address);
-void start_listening(int server_fd);
-int accept_connection(int server_fd, struct sockaddr_in *address, socklen_t *addrlen);
-void handle_client(int client_socket);
+// Struct representing a client
+struct client {
+    char *name;
+    int confd;
+    struct client *next;
+};
+
+// Global variables
+extern pthread_mutex_t mutex;
+extern struct client *header;
+
+void add_user(struct client *user);
+void delete_user(int confd);
+int connection(char *port);
+void send_msg(int confd, char *msg, char *receiver, char *sender);
+void evaluate(char *buf, int confd, char *username);
+void *client_handler(void *vargp);
 
 #endif // SERVER_H

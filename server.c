@@ -1,33 +1,51 @@
 #include "server.h"
 
-int main() {
-    int server_fd, client_socket;
-    struct sockaddr_in address;
-    socklen_t addrlen = sizeof(address);
+int main(int argc, char **argv) {
+    struct sockaddr_storage clientaddr;
+    socklen_t clientlen;
+    int listenfd = -1;
+    char *port = "80";
+    pthread_t tid;
 
-    // Create socket
-    server_fd = create_server_socket();
+    if (argc > 1) {
+        port = argv[1];
+    }
 
-    // Configure server address
-    configure_server_address(&address);
+    listenfd = connection(port);
 
-    // Bind socket to the configured address and port
-    bind_socket(server_fd, &address);
+    if (listenfd == -1) {
+        fprintf(stderr, "Error: Could not establish server on port %s\n", port);
+        exit(EXIT_FAILURE);
+    }
 
-    // Start listening for connections
-    start_listening(server_fd);
-    printf("Server is listening on port %d\n", PORT);
+    printf("Server listening on port %s\n", port);
 
-    // Accept a connection from a client
-    client_socket = accept_connection(server_fd, &address, &addrlen);
+    while (1) {
+        clientlen = sizeof(struct sockaddr_storage);
+        int *confd = malloc(sizeof(int));
 
-    // Handle communication with the client
-    handle_client(client_socket);
+        if (confd == NULL) {
+            perror("Error allocating memory for client connection");
+            continue;
+        }
 
-    // Close the sockets
-    close(client_socket);
-    close(server_fd);
+        *confd = accept(listenfd, (struct sockaddr *)&clientaddr, &clientlen);
 
+        if (*confd < 0) {
+            perror("Error accepting client connection");
+            free(confd);
+            continue;
+        }
+
+        printf("New client connected\n");
+
+        if (pthread_create(&tid, NULL, client_handler, confd) != 0) {
+            perror("Error creating thread");
+            free(confd);
+            continue;
+        }
+    }
+
+    close(listenfd);
     return 0;
 }
-

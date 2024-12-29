@@ -1,44 +1,87 @@
 #include "client.h"
+#include "helper.h"
 
-int create_socket() {
-    int client_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (client_fd < 0) {
-        perror("Socket creation failed");
+char prompt[] = "Chatroom> ";
+
+// Print usage information
+void usage() {
+    printf("-h  print help\n");
+    printf("-a  IP address of the server [Required]\n");
+    printf("-p  port number of the server [Required]\n");
+    printf("-u  enter your username [Required]\n");
+}
+
+// Establish a connection to the server
+int connection(char* hostname, char* port) {
+    int clientfd, rc;
+    struct addrinfo hints, *listp, *p;
+
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM; // Connections only
+    hints.ai_flags |= AI_ADDRCONFIG;
+    hints.ai_flags |= AI_NUMERICSERV; // Use fixed port number
+
+    if ((rc = getaddrinfo(hostname, port, &hints, &listp)) != 0) {
+        fprintf(stderr, "Invalid hostname or port number\n");
         return -1;
     }
-    return client_fd;
-}
 
-int configure_server_address(struct sockaddr_in *serv_addr) {
-    serv_addr->sin_family = AF_INET;
-    serv_addr->sin_port = htons(PORT);
+    for (p = listp; p; p = p->ai_next) {
+        clientfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (clientfd < 0) {
+            continue; // Socket creation failed, try the next
+        }
 
-    // Convert IPv4 address from text to binary form
-    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr->sin_addr) <= 0) {
-        perror("Invalid address/Address not supported");
-        return -1;
+        if (connect(clientfd, p->ai_addr, p->ai_addrlen) != -1) {
+            break; // Success
+        }
+
+        if (close(clientfd) < 0) {
+            fprintf(stderr, "connection: close failed: %s\n", strerror(errno));
+            return -1;
+        }
     }
-    return 0;
-}
 
-int connect_to_server(int client_fd, struct sockaddr_in *serv_addr) {
-    if (connect(client_fd, (struct sockaddr *)serv_addr, sizeof(*serv_addr)) < 0) {
-        perror("Connection failed");
-        return -1;
-    }
-    return 0;
-}
-
-void send_message(int client_fd, const char *message) {
-    send(client_fd, message, strlen(message), 0);
-    printf("Message sent: %s\n", message);
-}
-
-void read_response(int client_fd, char *buffer, size_t buffer_size) {
-    int valread = read(client_fd, buffer, buffer_size - 1);
-    if (valread >= 0) {
-        buffer[valread] = '\0'; // Null-terminate the buffer
+    freeaddrinfo(listp);
+    if (!p) {
+        return -1; // All connection attempts failed
     } else {
-        perror("Read failed");
+        return clientfd; // Connection succeeded
+    }
+}
+
+// Thread function for reading server responses
+void reader(void* var) {
+    char buf[MAXLINE];
+    io_t io;
+    int status;
+    int connID = (int)(intptr_t)var;
+
+    io_readinitb(&io, connID);
+    while (1) {
+        while ((status = io_readlineb(&io, buf, MAXLINE)) > 0) {
+            if (status == -1) {
+                exit(1);
+            }
+
+            if (!strcmp(buf, "\r\n")) {
+                break;
+            }
+
+            if (!strcmp(buf, "exit")) {
+                close(connID);
+                exit(0);
+            }
+
+            if (!strcmp(buf, "start\n")) {
+                printf("\n");
+            } else {
+                printf("%s", buf);
+            }
+        }
+
+        printf("%s", prompt);
+        fflush(stdout);
     }
 }
