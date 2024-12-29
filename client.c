@@ -1,48 +1,31 @@
-#include <arpa/inet.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#define PORT 8080
+#include "client.h"
 
-int main(int argc, char const* argv[])
-{
-    int status, valread, client_fd;
+int main() {
+    int client_fd;
     struct sockaddr_in serv_addr;
-    char* hello = "Hello from client";
-    char buffer[1024] = { 0 };
-    if ((client_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        printf("\n Socket creation error \n");
+    char buffer[1024] = {0};
+    char *hello = "Hello from client";
+
+    // Create socket
+    client_fd = create_socket();
+
+    // Configure server address
+    configure_server_address(&serv_addr);
+
+    // Connect to the server
+    if (connect_to_server(client_fd, &serv_addr) < 0) {
         return -1;
     }
 
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
+    // Send message to server
+    send_message(client_fd, hello);
 
-    // Convert IPv4 and IPv6 addresses from text to binary
-    // form
-    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)
-        <= 0) {
-        printf(
-            "\nInvalid address/ Address not supported \n");
-        return -1;
-    }
-
-    if ((status
-         = connect(client_fd, (struct sockaddr*)&serv_addr,
-                   sizeof(serv_addr)))
-        < 0) {
-        printf("\nConnection Failed \n");
-        return -1;
-    }
-    send(client_fd, hello, strlen(hello), 0);
-    printf("Hello message sent\n");
-    valread = read(client_fd, buffer,
-                   1024 - 1); // subtract 1 for the null
-                              // terminator at the end
+    // Read response from server
+    read_response(client_fd, buffer, sizeof(buffer));
     printf("%s\n", buffer);
 
-    // closing the connected socket
+    // Close the socket
     close(client_fd);
+
     return 0;
 }
